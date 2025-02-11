@@ -50,3 +50,5 @@ Tokio 改革变更已发布为 0.1。依赖项（[`tokio-io`](https://github.com
 请试用今天发布的更改。同样，接下来的几个月是我们发布下一个版本之前的试验期。所以，现在是尝试并提供反馈的时候了。
 
 在此期间，我们将整合这项工作以在 [Tower](https://github.com/tower-rs/tower) 中构建更高级别的原语，这是由 [Conduit](https://github.com/runconduit/conduit) 项目的生产运营需求推动的。
+
+———Carl Lerche
