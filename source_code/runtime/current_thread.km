@@ -1,0 +1,310 @@
+{
+    "root": {
+        "data": {
+            "id": "d7zmqbo70xs0",
+            "created": 1740293984807,
+            "text": "CurrentThread",
+            "note": "CurrentThread 运行时，提供了以下方法：\n\n- new：根据 driver、driver_handle、blocking_spawner、seed_generator、config 和 local_tid 构建出运行时。这里在创建调度器 handle 的 Shared 时，只会构建出一个全局队列和一个 OwnedTasks 的一个内部链表。构建 core 时，会构建出一个固定容量（INITIAL_CAPACITY）的队列；没有明白这里的 OwnedTasks 队列和 core 中的队列的联系与区别。\n- take_core：从 AtomicCell<Core> 中取出 core，并用 core 构建出 context\n- block_on：阻塞运行某个 future。先调用 enter_runtime 确保当前线程进入到执行器的动态范围内，然后获取 current_thread 的 scheduler 的 handle。然后进入循环中。\n\t- 先调用 take_core 构建 context，将 core 的 worker 设置为当前的线程 id；再调用 core.block_on；\n  \t- 如果 take_core 函数失败，则构建一个 notified，先 poll notified，后续的逻辑没有理解为什么，但注释是选择一个 notification 上的 core 可用或者 future 已经 complete\n- shutdown：关闭运行时\n\nCoreGuard 实现的方法如下：\n\n- block_on：在一个 loop 循环中，先执行参数中传递的 future，这个 future 会创建一些额外的任务，在执行完这个 future 后，会从 core 中依次取出任务执行，当无法取出任务时，会尝试再执行参数传递的 future。\n- enter：进入到 scheduler 的上下文中，设置任务队列和一些其他的线程本地变量\n"
+        },
+        "children": [
+            {
+                "data": {
+                    "id": "d7zmzjqpwrc0",
+                    "created": 1740294707651,
+                    "text": "tasks",
+                    "note": "在脑图中换了一个名称，实际对应的是 tokio/src/runtime/scheduler/current_thread/mod/CurrentThread 结构，用于表示在 current thread 上的任务。"
+                },
+                "children": [
+                    {
+                        "data": {
+                            "id": "d7zmqg41jr40",
+                            "created": 1740293994472,
+                            "text": "core: AtomicCell<Core>",
+                            "note": "调度器的核心数据，必须在线程进入 `block_on` 函数后才可以访问。\n\n提供了以下方法：\n\n- tick：增加 tick 计数\n- next_local_task：从 tasks 中取出最前面的任务\n- next_task：从任务队列中取出下一个任务，如果从局部队列中取出 global_queue_interval 次任务或者局部队列为空，则会从全局队列中取出；如果 global_queue_interval 用完，且全局队列为空，则仍然从局部队列中取出\n- push_task：将任务放到 tasks 的尾部"
+                        },
+                        "children": [
+                            {
+                                "data": {
+                                    "id": "d7zmqtybe880",
+                                    "created": 1740294024601,
+                                    "text": "tasks: VecDeque<Notified>",
+                                    "note": "`type Notified = task::Notified<Arc<Handle>>`\n\n这是调度器的 run queue。"
+                                },
+                                "children": []
+                            },
+                            {
+                                "data": {
+                                    "id": "d7zmr4ocsew0",
+                                    "created": 1740294047943,
+                                    "text": "tick",
+                                    "note": "用于计算次数"
+                                },
+                                "children": []
+                            },
+                            {
+                                "data": {
+                                    "id": "d7zmr8tf1q00",
+                                    "created": 1740294056956,
+                                    "text": "driver",
+                                    "note": "在 park thread 之前，会将 driver 移除。"
+                                },
+                                "children": []
+                            },
+                            {
+                                "data": {
+                                    "id": "d7zmrc2875s0",
+                                    "created": 1740294064019,
+                                    "text": "metrics"
+                                },
+                                "children": []
+                            },
+                            {
+                                "data": {
+                                    "id": "d7zmrfd38yo0",
+                                    "created": 1740294071206,
+                                    "text": "global_queue_interval",
+                                    "note": "从全局队列中取出任务的间隔"
+                                },
+                                "children": []
+                            },
+                            {
+                                "data": {
+                                    "id": "d7zmrm38pyo0",
+                                    "created": 1740294085848,
+                                    "text": "unhandled_panic"
+                                },
+                                "children": []
+                            }
+                        ]
+                    },
+                    {
+                        "data": {
+                            "id": "d7zmqnniaq80",
+                            "created": 1740294010886,
+                            "text": "notify",
+                            "note": "用于唤醒其他线程来窃取 driver。"
+                        },
+                        "children": [
+                            {
+                                "data": {
+                                    "id": "d7zms5cwzjs0",
+                                    "created": 1740294127792,
+                                    "text": "state"
+                                },
+                                "children": []
+                            },
+                            {
+                                "data": {
+                                    "id": "d7zms9dpvq80",
+                                    "created": 1740294136548,
+                                    "text": "waiters"
+                                },
+                                "children": []
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "data": {
+                    "id": "d7zmzm75wy80",
+                    "created": 1740294712999,
+                    "text": "context",
+                    "note": "enter_runtime 函数，用于标记当前的线程进入执行器的动态范围。\n\n提供了以下方法：\n\n- run_task：先调用 enter，占用 core，再调用 task::coop::budget(f) 设置好 budget，再执行闭包 f 中的逻辑\n- park：它会阻塞整个线程。从 core 中取出 driver，如果存在 before_park 函数，则执行；如果局部队列为空，则开始执行 driver.park 函数，唤醒一个 defer 列表中的任务；如果存在 after_unpark 函数，则执行；最后，再将 core、driver 从 context 中释放掉。\n- park_yield：不会阻塞线程。与 park 类似，但核心的逻辑是调用 driver.park_timeout 函数\n- enter：占用 core，执行完传递进来的闭包后，返还 core\n"
+                },
+                "children": [
+                    {
+                        "data": {
+                            "id": "d7zn0ag7ns80",
+                            "created": 1740294765789,
+                            "text": "handle: Arc<Handle>",
+                            "note": "调度器的句柄，包括了任务队列，IO handle、回调函数等。\n\n提供了以下方法：\n\n- spawn：创建出三个引用，task 直接放入到 shared 的 OwnedTasks 中，notified 引用直接在这里被 scheduler 的 schedule 函数消耗掉；返回 JoinHandle 引用\n- spawn_local：同 spawn，但任务没有 Send\n- next_remote_task：从 shared 的 inject 全局队列中取出任务\n- waker_ref：将 woken 标记为 true，并构造出 waker_ref\n- reset_woken：将 woken 标记为 false\n- num_alive_tasks：shared 中的 OwnedTasks 中活跃的任务数量\n- injection_queue_depth：shared 中的 inject 全局队列的任务数量\n\n实现了 Schedule trait 定义的一些方法：\n\n- release：释放掉 shared 的 OwnedTaks 中的某个任务\n- schedule：参数为任务的 Notified 引用。如果当前的 context 中的 handle 与 自己相等，则将任务放入到自己的 tasks 局部队列中。如果 scheduler 的 handle 不相等，则放入到 shared 的 inject 全局队列中，并调用 driver.unpark 函数唤醒线程\n- hooks：返回任务结束时的回调函数\n\n与 Wake 相关的函数：\n\n- wake：调用 wake_by_ref\n- wake_by_ref：将 shared 的 woken 标记为 true，并调用 driver.park 函数唤醒线程"
+                        },
+                        "children": [
+                            {
+                                "data": {
+                                    "id": "d7zmtrud6a80",
+                                    "created": 1740294255101,
+                                    "text": "Shared",
+                                    "note": "跨线程共享的调度器状态"
+                                },
+                                "children": [
+                                    {
+                                        "data": {
+                                            "id": "d7zmutneeu00",
+                                            "created": 1740294337397,
+                                            "text": "inject: Inject<Arc<Handle>>",
+                                            "note": "这里的 `Arc<Handle>` 不意味着这个队列中存储的是 Handle。\n\n这是全局队列。"
+                                        },
+                                        "children": [
+                                            {
+                                                "data": {
+                                                    "id": "d7zople5tag0",
+                                                    "created": 1740299569823,
+                                                    "text": "shared",
+                                                    "note": "Inject 链表中的数量。"
+                                                },
+                                                "children": []
+                                            },
+                                            {
+                                                "data": {
+                                                    "id": "d7zopocqso00",
+                                                    "created": 1740299576268,
+                                                    "text": "Synced",
+                                                    "note": "Inject 中的任务链表"
+                                                },
+                                                "children": []
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "data": {
+                                            "id": "d7zmv3z25wo0",
+                                            "created": 1740294359871,
+                                            "text": "owned: OwnedTasks<Arc<Handle>>",
+                                            "note": "这里的 `Arc<Handle>` 不意味着这个队列中存储的是 Handle。\n\n里面存储的是任务 RawTask，表示当前生成到这个 executor 上的所有处于活跃状态的任务。\n\n"
+                                        },
+                                        "children": []
+                                    },
+                                    {
+                                        "data": {
+                                            "id": "d7zmv7u54l40",
+                                            "created": 1740294368280,
+                                            "text": "woken: AtomicBool",
+                                            "note": "用于指示阻塞的线程是否被唤醒"
+                                        },
+                                        "children": []
+                                    },
+                                    {
+                                        "data": {
+                                            "id": "d7zmvbf48zk0",
+                                            "created": 1740294376079,
+                                            "text": "config: Config",
+                                            "note": "调度器的相关配置"
+                                        },
+                                        "children": []
+                                    },
+                                    {
+                                        "data": {
+                                            "id": "d7zmvfrzu480",
+                                            "created": 1740294385564,
+                                            "text": "scheduler_metrics: SchedulerMetrics"
+                                        },
+                                        "children": []
+                                    },
+                                    {
+                                        "data": {
+                                            "id": "d7zmvlxo7ao0",
+                                            "created": 1740294398968,
+                                            "text": "worker_metrics: WorkerMetrics"
+                                        },
+                                        "children": []
+                                    }
+                                ]
+                            },
+                            {
+                                "data": {
+                                    "id": "d7zmtxj5pe00",
+                                    "created": 1740294267484,
+                                    "text": "driver: driver::Handle",
+                                    "note": "对 IO 或者 timer 资源的句柄。"
+                                },
+                                "children": [
+                                    {
+                                        "data": {
+                                            "id": "d7zouond0c00",
+                                            "created": 1740299968731,
+                                            "text": "io: IoHandle"
+                                        },
+                                        "children": []
+                                    },
+                                    {
+                                        "data": {
+                                            "id": "d7zouv3upjs0",
+                                            "created": 1740299982789,
+                                            "text": "signal: SignalHandle"
+                                        },
+                                        "children": []
+                                    },
+                                    {
+                                        "data": {
+                                            "id": "d7zouz01uvk0",
+                                            "created": 1740299991266,
+                                            "text": "time: TimeHandle"
+                                        },
+                                        "children": []
+                                    },
+                                    {
+                                        "data": {
+                                            "id": "d7zov2bmc0g0",
+                                            "created": 1740299998496,
+                                            "text": "clock: Clock"
+                                        },
+                                        "children": []
+                                    }
+                                ]
+                            },
+                            {
+                                "data": {
+                                    "id": "d7zmu4iyqbs0",
+                                    "created": 1740294282710,
+                                    "text": "blocking_spawner: blocking::Spawner",
+                                    "note": "这个数据结构设计到 BlockingPool 的实现，其中关于任务、调度有变化，在单独的文件中进行描述"
+                                },
+                                "children": []
+                            },
+                            {
+                                "data": {
+                                    "id": "d7zmueho0200",
+                                    "created": 1740294304399,
+                                    "text": "seed_generator",
+                                    "note": "随机数生成器"
+                                },
+                                "children": []
+                            },
+                            {
+                                "data": {
+                                    "id": "d7zmui163fs0",
+                                    "created": 1740294312108,
+                                    "text": "task_hooks",
+                                    "note": "用户提供的回调函数\n\n```rust\n#[derive(Clone)]\npub(crate) struct TaskHooks {\n    pub(crate) task_spawn_callback: Option<TaskCallback>,\n    pub(crate) task_terminate_callback: Option<TaskCallback>,\n    #[cfg(tokio_unstable)]\n    pub(crate) before_poll_callback: Option<TaskCallback>,\n    #[cfg(tokio_unstable)]\n    pub(crate) after_poll_callback: Option<TaskCallback>,\n}\n```\n\n提供了任务创建和结束任务时的回调函数，以及在 poll future 前后的回调函数。"
+                                },
+                                "children": []
+                            },
+                            {
+                                "data": {
+                                    "id": "d7zmul0dppk0",
+                                    "created": 1740294318591,
+                                    "text": "local_tid",
+                                    "note": "如果这是 `LocalRuntime`，这个用于表示所属的线程的 id"
+                                },
+                                "children": []
+                            }
+                        ]
+                    },
+                    {
+                        "data": {
+                            "id": "d7zn0dsl90w0",
+                            "created": 1740294773068,
+                            "text": "core: RefCell<Option<Box<Core>>>",
+                            "note": "调度器的任务相关的数据结构，对应到 CurrentThread 下的 tasks 结构。"
+                        },
+                        "children": []
+                    },
+                    {
+                        "data": {
+                            "id": "d7zn0hqdkkw0",
+                            "created": 1740294781641,
+                            "text": "defer: Defer",
+                            "note": "记录推迟的任务的链表\n\n`deferred: RefCell<Vec<Waker>>`"
+                        },
+                        "children": []
+                    }
+                ]
+            }
+        ]
+    },
+    "template": "right",
+    "theme": "fresh-blue",
+    "version": "1.4.43"
+}

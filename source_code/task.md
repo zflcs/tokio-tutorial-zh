@@ -1,5 +1,7 @@
 # task
 
+这个模块主要提供的是关于 task 的 API，与 task 相关的数据结构在 runtime 中定义
+
 shutdown 函数需要在下一次 await 时才起作用，或者已经处于让权状态。
 
 使用 spawn_blocking 创建的任务不可以被 shutdown，因为这些任务不是 async 的，即使进行了操作，任务仍将继续运行。但如果任务尚未开始运行，则会阻止这个任务开始。

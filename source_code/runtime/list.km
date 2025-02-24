@@ -1,0 +1,33 @@
+{
+    "root": {
+        "data": {
+            "id": "d7zlk7syea00",
+            "created": 1740290685092,
+            "text": "任务链表",
+            "note": "被封装为 List<S>：\n\n```rust\npub(crate) struct ShardedList<L, T> {\n    lists: Box<[Mutex<LinkedList<L, T>>]>,\n    added: MetricAtomicU64,\n    count: MetricAtomicUsize,\n    shard_mask: usize,\n}\n```\n\n提供了以下方法：\n  \n- new：创建一个容量为 size 的侵入式链表\n- shard_inner：获取下标为 id 的指定的链表 \n- pop_back：先根据参数提供的 shard_id 获取到对应链表，再从链表中探出最后一个元素，并且 count-1\n- remove：从链表中删除指定节点。先从节点获取到目标链表的 id，再根据 id 获取到对应的链表，再来删除节点\n- lock_shard：获取到参数对应的链表的 lock_guard，从而可以对其进行写操作\n- \n"
+        },
+        "children": [
+            {
+                "data": {
+                    "id": "d7zlzt60ipk0",
+                    "created": 1740291907057,
+                    "text": "OwnedTasks",
+                    "note": "```rust\npub(crate) struct OwnedTasks<S: 'static> {\n    list: List<S>,\n    pub(crate) id: NonZeroU64,\n    closed: AtomicBool,\n}\n```\n\n提供了以下方法：\n\n- new：创建一个 num_cores 数量的 shard 链表\n- bind：根据传递的 task、scheduler、id 创建一个新的任务，调用 bind_inner 函数；这个函数的 id 参数用于 Core 中的 task_id 字段\n- bind_local：与 bind 的逻辑相同，但是任务没有 Send\n- bind_inner：这里将任务的 header 中的 owner_id 设置为 OwnedTasks 的 id，并且将 task 放入到 id 的指定链表中\n- close_and_shutdown_all：将这个结构中的从 start 开始的所有任务链表中的任务都清空\n- remove：删除任务\n\n虽然 List 中可以有多个链表，但是由于 id，所以实际上的任务的插入删除都是围绕着一个 LinkedList 来进行的。"
+                },
+                "children": []
+            },
+            {
+                "data": {
+                    "id": "d7zm0bh7yj40",
+                    "created": 1740291946917,
+                    "text": "LocalOwnedTasks",
+                    "note": "```rust\npub(crate) struct LocalOwnedTasks<S: 'static> {\n    inner: UnsafeCell<OwnedTasksInner<S>>,\n    pub(crate) id: NonZeroU64,\n    _not_send_or_sync: PhantomData<*const ()>,\n}\n\nstruct OwnedTasksInner<S: 'static> {\n    list: LinkedList<Task<S>, <Task<S> as Link>::Target>,\n    closed: bool,\n}\n```\n\n提供的方法与 OwnedTasks 类似。"
+                },
+                "children": []
+            }
+        ]
+    },
+    "template": "right",
+    "theme": "fresh-blue",
+    "version": "1.4.43"
+}

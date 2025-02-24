@@ -1,0 +1,388 @@
+{
+    "root": {
+        "data": {
+            "id": "d7zufm6rl0g0",
+            "created": 1740315714571,
+            "text": "MultiThread",
+            "note": "相较于 CurrentThread，这个结构没有任何内部数据结构。\n\n提供了以下方法：\n\n- new：根据提供的 size、driver、driver_handle、blocking_spawner、seed_generator 和 config 调用 worker 的 create 函数生成 size 个 worker。返回 handle、launch。\n- block_on：先调用 enter_runtime 进入到执行器上下文中，然后调用 blocking.block_on 执行 future\n\n\nLaunch(Vec<Arc<Worker>>) 用于启动所有的 worker：对所有的 worker 调用 `runtime::spawn_blocking(move || run(worker))`。"
+        },
+        "children": [
+            {
+                "data": {
+                    "id": "d7zwv3v4qgw0",
+                    "created": 1740322570732,
+                    "text": "Handle",
+                    "note": "这里的 scheduler 的定义与 current_thread 中的定义类似，区别在于 shared 是 worker::Shared。每个 worker 都使用这个 handle。\n\n提供了以下方法：\n\n- spawn：调用 bind_new_task 方法\n- bind_new_task：调用 shared 的 OwnedTasks 的 bind 方法，生成 JoinHandle 和 Notified 引用。将 Notified 引用放入到调度器中，然后返回 JoinHandle 引用。\n- block_in_place：先调用 current_enter_context 禅师进入执行器上下文，如果进入成功，且 maybe_cx 有内容，才可以进行后续的操作，否则直接返回。先将 lifo 中的任务（lifo 中的任务无法被窃取）通过 push_back_or_overflow 放入就绪队列中。这里先将 core 设置为当前的 woker 占用，然后将 worker 的 handle 发送给新的线程来处理（调用 `runtime::spawn_blocking(move || run(worker))`）。如果上述的设置成功，且 \nhad_entered 成功，则退出执行器上下文，否则执行参数中的闭包。\n\n实现了 Schedule trait 定义的接口：\n\n- release：将 OwnedTasks 中的任务删除\n- schedule：调用 schedule_task 函数，如果当前的 worker 与 context 中的 worker 相同，则放入到局部队列中，否则放入全局队列。"
+                },
+                "children": [
+                    {
+                        "data": {
+                            "id": "d7zwv8fys680",
+                            "created": 1740322580699,
+                            "text": "shared: worker::Shared"
+                        },
+                        "children": [
+                            {
+                                "data": {
+                                    "id": "d808h8ghiug0",
+                                    "created": 1740355336951,
+                                    "text": "remotes: Box<[Remote]>"
+                                },
+                                "children": [
+                                    {
+                                        "data": {
+                                            "id": "d808m3krt740",
+                                            "created": 1740355718147,
+                                            "text": "steal: queue::Steal<Arc<Handle>>",
+                                            "note": "这个 steal 队列和 core 的 run_queue 是指向同一个队列的。"
+                                        },
+                                        "children": []
+                                    },
+                                    {
+                                        "data": {
+                                            "id": "d808m89ph6w0",
+                                            "created": 1740355728362,
+                                            "text": "unpark: Unparker"
+                                        },
+                                        "children": []
+                                    }
+                                ]
+                            },
+                            {
+                                "data": {
+                                    "id": "d808hcou5a80",
+                                    "created": 1740355346163,
+                                    "text": "inject: inject::Shared<Arc<Handle>>"
+                                },
+                                "children": [
+                                    {
+                                        "data": {
+                                            "id": "d808wyrn6q00",
+                                            "created": 1740356569684,
+                                            "text": "len: AtomicUsize"
+                                        },
+                                        "children": []
+                                    }
+                                ]
+                            },
+                            {
+                                "data": {
+                                    "id": "d808kpmtzxc0",
+                                    "created": 1740355609432,
+                                    "text": "idle: Idle"
+                                },
+                                "children": [
+                                    {
+                                        "data": {
+                                            "id": "d808wpa53tc0",
+                                            "created": 1740356549035,
+                                            "text": "state: AtomicUsize"
+                                        },
+                                        "children": []
+                                    },
+                                    {
+                                        "data": {
+                                            "id": "d808wsry3wg0",
+                                            "created": 1740356556642,
+                                            "text": "num_workers: usize"
+                                        },
+                                        "children": []
+                                    }
+                                ]
+                            },
+                            {
+                                "data": {
+                                    "id": "d808kujngc00",
+                                    "created": 1740355620124,
+                                    "text": "owned: OwnedTasks<Arc<Handle>>"
+                                },
+                                "children": []
+                            },
+                            {
+                                "data": {
+                                    "id": "d808ky5hgwg0",
+                                    "created": 1740355627974,
+                                    "text": "synced: Mutex<Synced>"
+                                },
+                                "children": [
+                                    {
+                                        "data": {
+                                            "id": "d808xhhxct40",
+                                            "created": 1740356610455,
+                                            "text": "idle: idle::Synced"
+                                        },
+                                        "children": []
+                                    },
+                                    {
+                                        "data": {
+                                            "id": "d808xn1hxq80",
+                                            "created": 1740356622523,
+                                            "text": "inject: inject::Synced"
+                                        },
+                                        "children": []
+                                    }
+                                ]
+                            },
+                            {
+                                "data": {
+                                    "id": "d808l39sj2o0",
+                                    "created": 1740355639119,
+                                    "text": "shutdown_cores: Mutex<Vec<Box<Core>>>"
+                                },
+                                "children": []
+                            },
+                            {
+                                "data": {
+                                    "id": "d808laxpzoo0",
+                                    "created": 1740355655803,
+                                    "text": "trace_status: TraceStatus"
+                                },
+                                "children": []
+                            },
+                            {
+                                "data": {
+                                    "id": "d808ldzut3s0",
+                                    "created": 1740355662462,
+                                    "text": "config: Config"
+                                },
+                                "children": []
+                            },
+                            {
+                                "data": {
+                                    "id": "d808lhoqx3s0",
+                                    "created": 1740355670498,
+                                    "text": "scheduler_metrics: SchedulerMetrics"
+                                },
+                                "children": []
+                            },
+                            {
+                                "data": {
+                                    "id": "d808lkn8xps0",
+                                    "created": 1740355676938,
+                                    "text": "worker_metrics: Box<[WorkerMetrics]>"
+                                },
+                                "children": []
+                            },
+                            {
+                                "data": {
+                                    "id": "d808lod8d5k0",
+                                    "created": 1740355685039,
+                                    "text": "_counters: Counters"
+                                },
+                                "children": []
+                            }
+                        ]
+                    },
+                    {
+                        "data": {
+                            "id": "d7zwvfln6wo0",
+                            "created": 1740322596279,
+                            "text": "driver: driver::Handle"
+                        },
+                        "children": []
+                    },
+                    {
+                        "data": {
+                            "id": "d7zwvkh79e00",
+                            "created": 1740322606895,
+                            "text": "blocking_spawner: blocking::Spawner"
+                        },
+                        "children": []
+                    },
+                    {
+                        "data": {
+                            "id": "d7zwvrqsb7s0",
+                            "created": 1740322622712,
+                            "text": "seed_generator: RngSeedGenerator"
+                        },
+                        "children": []
+                    },
+                    {
+                        "data": {
+                            "id": "d7zwvvzs9z40",
+                            "created": 1740322631963,
+                            "text": "task_hooks: TaskHooks"
+                        },
+                        "children": []
+                    }
+                ]
+            },
+            {
+                "data": {
+                    "id": "d808zjmk04g0",
+                    "created": 1740356771817,
+                    "text": "worker",
+                    "note": "提供了以下方法：\n\n- create：生成 size 个 core、remotes，steal 和 run_queue。创建一个 idle 和 idle 使用的 Synced。创建一个 inject 和 inject 使用的 Synced。这两个 Synced 不同，一个是用于存放处于 searching 和 unpark 的 worker，另一个作为全局队列用于存放任务。shared 中 OwnedTasks 会创建 size 个内部的链表。紧接着创建 launch。\n- run：先将 handle.shared.worker 设置为当前的线程 id，接着调用 enter_runtime，设置 worker 的 context，再调用 cx.run(core) 函数，最后调用 cx.defer.wake() 函数。"
+                },
+                "children": [
+                    {
+                        "data": {
+                            "id": "d808zrm3mds0",
+                            "created": 1740356789205,
+                            "text": "handle: Arc<Handle>",
+                            "note": "调度器的句柄"
+                        },
+                        "children": []
+                    },
+                    {
+                        "data": {
+                            "id": "d808zvhvb940",
+                            "created": 1740356797655,
+                            "text": "index: usize",
+                            "note": "worker 对应的 remote 状态"
+                        },
+                        "children": []
+                    },
+                    {
+                        "data": {
+                            "id": "d809025fjfs0",
+                            "created": 1740356812141,
+                            "text": "core: AtomicCell<Core>",
+                            "note": "用于将 work 的 core 交给另一个线程"
+                        },
+                        "children": [
+                            {
+                                "data": {
+                                    "id": "d808y6biwyo0",
+                                    "created": 1740356664488,
+                                    "text": "Core",
+                                    "note": "提供了以下方法：\n\n- tick：\n- next_task：如果 tick 没有达到 global_queue_interval 或全局队列无法取出任务时，从局部队列中取出任务；如果局部队列为空，则从全局队列中取出任务，此时会计算出要从全局队列中取出的任务数量，一次性取出。\n- next_local_task：先从 lifo 中取，再从 局部队列取\n- steal_work：用内部的随机数生成器随机挑选一个目标 worker，从目标 worker 的 steal 队列中窃取一半任务到本地队列中"
+                                },
+                                "children": [
+                                    {
+                                        "data": {
+                                            "id": "d808yioh7fc0",
+                                            "created": 1740356691392,
+                                            "text": "tick"
+                                        },
+                                        "children": []
+                                    },
+                                    {
+                                        "data": {
+                                            "id": "d808yq4iuoo0",
+                                            "created": 1740356707600,
+                                            "text": "lifo_slot: Option<Notified>",
+                                            "note": "lifo 槽，用于优化局部性"
+                                        },
+                                        "children": []
+                                    },
+                                    {
+                                        "data": {
+                                            "id": "d808ytgwiso0",
+                                            "created": 1740356714879,
+                                            "text": "lifo_enabled"
+                                        },
+                                        "children": []
+                                    },
+                                    {
+                                        "data": {
+                                            "id": "d808ywtuhnc0",
+                                            "created": 1740356722192,
+                                            "text": "run_queue: queue::Local<Arc<Handle>>",
+                                            "note": "worker 的局部队列"
+                                        },
+                                        "children": []
+                                    },
+                                    {
+                                        "data": {
+                                            "id": "d808yzixmc00",
+                                            "created": 1740356728063,
+                                            "text": "is_searching"
+                                        },
+                                        "children": []
+                                    },
+                                    {
+                                        "data": {
+                                            "id": "d808z1886gw0",
+                                            "created": 1740356731769,
+                                            "text": "is_shutdown"
+                                        },
+                                        "children": []
+                                    },
+                                    {
+                                        "data": {
+                                            "id": "d808z39w2zk0",
+                                            "created": 1740356736223,
+                                            "text": "is_traced"
+                                        },
+                                        "children": []
+                                    },
+                                    {
+                                        "data": {
+                                            "id": "d808z5w5bj40",
+                                            "created": 1740356741922,
+                                            "text": "park: Option<Parker>"
+                                        },
+                                        "children": []
+                                    },
+                                    {
+                                        "data": {
+                                            "id": "d808z7yka8g0",
+                                            "created": 1740356746422,
+                                            "text": "stats: Stats"
+                                        },
+                                        "children": []
+                                    },
+                                    {
+                                        "data": {
+                                            "id": "d808zaqb9rc0",
+                                            "created": 1740356752453,
+                                            "text": "global_queue_interval: u32"
+                                        },
+                                        "children": []
+                                    },
+                                    {
+                                        "data": {
+                                            "id": "d808ze5ehbc0",
+                                            "created": 1740356759896,
+                                            "text": "rand: FastRand"
+                                        },
+                                        "children": []
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "data": {
+                    "id": "d8090oytg4g0",
+                    "created": 1740356861807,
+                    "text": "Context",
+                    "note": "提供了以下方法：\n\n- run：先使能 lifo，再通过 next_task 从 core 中取出下一个任务，使用 run_task 执行。如果不能从本地取出任务，则通过 steal_work 窃取任务。\n- run_task：设置好任务的 budget，然后调用 task.run 函数执行，任务执行返回 pending 后，如果 lifo 中有任务，且 budget 还有剩余，则继续 lifo 的任务，否则将 lifo 放回到 run_queue 中。\n- maintenance：当 tick 达到 event_interval 时，调用 park_timeout。\n- park：worker 线程会窃取与事件相关的 driver，执行 driver 的事件循环，将所有唤醒的任务放入到任务队列中，如果局部队列已经饱和，则放入到全局队列中。\n- park_timeout："
+                },
+                "children": [
+                    {
+                        "data": {
+                            "id": "d8090vf960o0",
+                            "created": 1740356875861,
+                            "text": "worker: Arc<Worker>",
+                            "note": null
+                        },
+                        "children": []
+                    },
+                    {
+                        "data": {
+                            "id": "d8090ykuljk0",
+                            "created": 1740356882730,
+                            "text": "core: RefCell<Option<Box<Core>>>"
+                        },
+                        "children": []
+                    },
+                    {
+                        "data": {
+                            "id": "d8091191haw0",
+                            "created": 1740356888546,
+                            "text": "defer: Defer"
+                        },
+                        "children": []
+                    }
+                ]
+            }
+        ]
+    },
+    "template": "right",
+    "theme": "fresh-blue",
+    "version": "1.4.43"
+}

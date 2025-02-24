@@ -1,0 +1,257 @@
+{
+    "root": {
+        "data": {
+            "id": "d7ysaphtat40",
+            "created": 1740208127772,
+            "text": "Harness<T: Future, S: 'static>",
+            "note": "```rust\npub(super) struct Harness<T: Future, S: 'static> {\n    cell: NonNull<Cell<T, S>>,\n}\n```\n\n与 Harness 相关的接口：\n\n- from_raw：根据 header 构建出 harness\n- 一些获取 Cell 中的字段的方法\n- poll、shutdown、dealloc、try_read_output、drop_join_handle_slow 函数在 vtable 中已经进行了描述\n- complete：任务必须处于 running，针对状态中的标识为清除 future、output 和 waker，并且释放引用计数"
+        },
+        "children": [
+            {
+                "data": {
+                    "id": "d7yv6jhbc740",
+                    "created": 1740216264554,
+                    "text": "Cell<T: Future, S>",
+                    "note": "与 Cell 相关的接口：\n\n- new(future: T, scheduler: S, state: State, task_id: Id) -> Box<Cell<T, S>>：根据 future、scheduler、state 和 task_id 在堆上构建处 Cell\n- ",
+                    "layout_right_offset": {
+                        "x": 4,
+                        "y": 1
+                    }
+                },
+                "children": [
+                    {
+                        "data": {
+                            "id": "d7ysjs8uyr40",
+                            "created": 1740208839038,
+                            "text": "header: Header",
+                            "note": "提供了与任务链表以及一些其他的任务控制块的操作接口：\n\n- set_next：设置下一个任务指针\n- set_owner_id：将 owner_id 设置当前任务所属的列表的 id\n- get_owner_id：\n- get_trailer：根据 vatble 中的 trailer_offset 以及自己的指针获取到 trailer\n- get_scheduler：同 get_trailer\n- get_id_ptr：同 get_trailer\n\n\nRawTask 等价于 Header，提供了以下方法：\n\n- drop_reference：引用计数 -1，必要时回收任务\n- wake_by_val：调用 transition_to_notified_by_val 修改任务状态，如果成功 Notified，则调用 schedule 函数，并丢弃一个引用\n- wake_by_ref：同上，但不丢弃引用"
+                        },
+                        "children": [
+                            {
+                                "data": {
+                                    "id": "d7ysc8y3fuw0",
+                                    "created": 1740208248479,
+                                    "text": "state",
+                                    "note": "任务状态，详细描述见 [task_state](./task_state)"
+                                },
+                                "children": []
+                            },
+                            {
+                                "data": {
+                                    "id": "d7yscf5xgh40",
+                                    "created": 1740208262014,
+                                    "text": "queue_next",
+                                    "note": "指向下一个任务的指针，用于全局队列（injection queue）中"
+                                },
+                                "children": []
+                            },
+                            {
+                                "data": {
+                                    "id": "d7ysckk7g7s0",
+                                    "created": 1740208273761,
+                                    "text": "vtable",
+                                    "note": "vtable 中的方法都是以 NonNull<Header> 作为参数"
+                                },
+                                "children": [
+                                    {
+                                        "data": {
+                                            "id": "d7ysg1rhudc0",
+                                            "created": 1740208546300,
+                                            "text": "poll",
+                                            "note": "将 NonNull<Header> 转化为 Harness::<T, S>，Harness<T: Future, S> 是对 NonNull<Cell<T, S>> 的封装，再调用 harness.poll() 函数。\n\nharness.poll() 函数实际上会调用 poll_inner 函数，其具体逻辑如下：\n\n  1. 先修改任务的状态为 running，如果任务状态是 Cancelled，则会直接调用 cancel_task 取消任务，并返回 PollFuture::Complete；如果为 Failed，则返回 PollFuture::Done；如果为 Dealloc，则返回 PollFuture::Dealloc；如果成功，则构建协程运行需要的 Waker 和 Context，再调用 poll_future 函数，如果协程返回 ready，则通过 drop_future_or_output 丢弃 future 或结果（修改 Stage 的枚举类型为 Consumed），并通过 store_output 将结果写到 Stage 中（修改 Stoge 类型为 Finished）\n  2. 若协程返回 Ready，则直接返回 PollFuture::Complete；否则，修改任务的状态为 idle。如果任务在 pending 是被取消了，则修改 idle 状态会失败，需要调用 cancel_task 函数，再调用 transition_result_to_poll_future 函数，返回这个函数的结果\n\n如果 poll_inner 的返回结果为 PollFuture::Notified，则会调用 yield 让权，并将当前运行的任务转化为 Notified，最后调用 drop_reference 函数减少引用计数，必要时回收任务"
+                                        },
+                                        "children": []
+                                    },
+                                    {
+                                        "data": {
+                                            "id": "d7ysg6e0ezc0",
+                                            "created": 1740208556368,
+                                            "text": "schedule",
+                                            "note": "先调用 Header::get_scheduler() 获取 scheduler。\n\nHeader::get_scheduler() 函数逻辑如下：\n1. 先通过 header 中的 vtable 记录的 scheduler_offset 获取到偏移\n2. 通过偏移以及 ptr 计算出 scheduler 的指针\n\n再调用 schedule trait 中定义的 schedule 函数"
+                                        },
+                                        "children": []
+                                    },
+                                    {
+                                        "data": {
+                                            "id": "d7ysgappf480",
+                                            "created": 1740208565782,
+                                            "text": "dealloc",
+                                            "note": "同样先得到 harness，再调用 harness.dealloc 函数：\n\n1. 将 trailer 中的数据清空\n2. 将 core 中的 stage 清空\n3. 将 cell 释放"
+                                        },
+                                        "children": []
+                                    },
+                                    {
+                                        "data": {
+                                            "id": "d7ysglvjnns0",
+                                            "created": 1740208590080,
+                                            "text": "try_read_output",
+                                            "note": "将参数中的 dst 转化为 `&mut Poll<Result<<*>>>`，再通过 harness.try_read_output 读取结果\n\n1. 先调用 can_read_output 判断当前任务所处的状态，任务必定处于 join_interested。如果任务没有 complete，需要将提供的 waker 写到 task 的 waker 字段。先会判断任务是否是 join_waker_set，如果是，则调用 trailer.will_wake 函数，判断 waker 与当前使用的 waker 是否相同，如果相同，则不需要更换 waker，如果不同，则调用 set_join_waker 更新其为当前的 waker。\n2. 如果 can_read_output 返回 true，则将结果写到 dst 处"
+                                        },
+                                        "children": []
+                                    },
+                                    {
+                                        "data": {
+                                            "id": "d7ysgrianqo0",
+                                            "created": 1740208602340,
+                                            "text": "drop_join_handle_slow",
+                                            "note": "先得到 harness，再调用 harness.drop_join_handle_slow 函数：\n\n1. 先修改状态，判断是否需要 drop future 或者 output，以及 waker\n2. 任务引用计数 -1"
+                                        },
+                                        "children": []
+                                    },
+                                    {
+                                        "data": {
+                                            "id": "d7ysgtxjryo0",
+                                            "created": 1740208607615,
+                                            "text": "drop_abort_handle",
+                                            "note": "先得到 harness，再调用 harness.drop_reference 函数：引用计数 -1，必要时回收任务\n\n"
+                                        },
+                                        "children": []
+                                    },
+                                    {
+                                        "data": {
+                                            "id": "d7ysgwr2kvc0",
+                                            "created": 1740208613754,
+                                            "text": "shutdown",
+                                            "note": "先得到 harness，再调用 harness.shutdown 函数：\n\n1. 修改状态为 shutdown（会将任务设置为 running 状态），如果任务之前不处于 idle 状态，则会引用计数 -1；\n2. 调用 cancel_task 状态取消任务\n3. 调用 complete 函数，修改状态为 complets，根据状态中的各个标志位，对 future 或 output 或 waker 丢弃。再调用 trailer 的 hooks 记录的 task_terminate_callback 回调函数对任务进行操作，最后释放掉空间"
+                                        },
+                                        "children": []
+                                    },
+                                    {
+                                        "data": {
+                                            "id": "d7ysh074hi80",
+                                            "created": 1740208621255,
+                                            "text": "trailer_offset"
+                                        },
+                                        "children": []
+                                    },
+                                    {
+                                        "data": {
+                                            "id": "d7ysh1p1grk0",
+                                            "created": 1740208624515,
+                                            "text": "scheduler_offset"
+                                        },
+                                        "children": []
+                                    },
+                                    {
+                                        "data": {
+                                            "id": "d7ysh69n2rc0",
+                                            "created": 1740208634468,
+                                            "text": "id_offset"
+                                        },
+                                        "children": []
+                                    }
+                                ]
+                            },
+                            {
+                                "data": {
+                                    "id": "d7yscqpq6ug0",
+                                    "created": 1740208287156,
+                                    "text": "owner_id",
+                                    "note": "如果 owner_id 为 None，则表示任务不在任何队列之中，如果不为 None，则表示任务在 OwnedTasks 或 LocalOwnedTasks 中的列表 id。一旦任务绑定到一个列表中，它不能被另一个列表绑定，机制从先前的列表中删除，这样做是希望能够在无需同步的情况下读取 id，即使它同时被从列表中删除。"
+                                },
+                                "children": []
+                            }
+                        ]
+                    },
+                    {
+                        "data": {
+                            "id": "d7ysl1gydcw0",
+                            "created": 1740208937483,
+                            "text": "core: Core<T: Future, S>",
+                            "note": "提供与 Future 执行相关的接口\n\n- poll：驱动 stage 中的 future 执行\n- drop_future_or_output：修改 Stage 为 Consumed\n- store_output：将 Future 执行的结果存储到 Stage 中\n- take_output：从 Stage 中取出 Future 执行的结果，将 stage 修改为 Consumed\n- set_stage，将结果修改为传递进来的 stage 参数"
+                        },
+                        "children": [
+                            {
+                                "data": {
+                                    "id": "d7yslya85540",
+                                    "created": 1740209008910,
+                                    "text": "scheduler"
+                                },
+                                "children": []
+                            },
+                            {
+                                "data": {
+                                    "id": "d7ysm1ip7ao0",
+                                    "created": 1740209015953,
+                                    "text": "task_id"
+                                },
+                                "children": []
+                            },
+                            {
+                                "data": {
+                                    "id": "d7ysm570qnk0",
+                                    "created": 1740209023954,
+                                    "text": "stage",
+                                    "note": "Future 以及 Future 的结果被存储在这里"
+                                },
+                                "children": [
+                                    {
+                                        "data": {
+                                            "id": "d7yu8hqlpsg0",
+                                            "created": 1740213596381,
+                                            "text": "Running(T)"
+                                        },
+                                        "children": []
+                                    },
+                                    {
+                                        "data": {
+                                            "id": "d7yu8kxi6gg0",
+                                            "created": 1740213603328,
+                                            "text": "Finished(super::Result<T::Output>)"
+                                        },
+                                        "children": []
+                                    },
+                                    {
+                                        "data": {
+                                            "id": "d7yu8pstckg0",
+                                            "created": 1740213613929,
+                                            "text": "Consumed"
+                                        },
+                                        "children": []
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "data": {
+                            "id": "d7ysmik11i80",
+                            "created": 1740209053038,
+                            "text": "trailer: Trailer",
+                            "note": "用于记录 cold 数据，这些数据只用于在 create 或者 shutdown 时。对应的接口有：\n\n- new：根据 hooks 创建一个 Trailer\n- set_waker：将 waker 记录到 trailer 中\n- will_wake：判断 waker 与自己记录的 waker 是否相同\n- wake_join：调用记录的 waker 的 waker.wake_by_ref() 方法\n"
+                        },
+                        "children": [
+                            {
+                                "data": {
+                                    "id": "d7yu9xuevwg0",
+                                    "created": 1740213709804,
+                                    "text": "owned: linked_list::Pointers<Header>"
+                                },
+                                "children": []
+                            },
+                            {
+                                "data": {
+                                    "id": "d7yua1mk7680",
+                                    "created": 1740213718036,
+                                    "text": "waker: UnsafeCell<Option<Waker>>"
+                                },
+                                "children": []
+                            },
+                            {
+                                "data": {
+                                    "id": "d7yua4fj09s0",
+                                    "created": 1740213724141,
+                                    "text": "hooks: TaskHarnessScheduleHooks"
+                                },
+                                "children": []
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    },
+    "template": "right",
+    "theme": "fresh-blue",
+    "version": "1.4.43"
+}

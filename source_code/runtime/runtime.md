@@ -22,6 +22,8 @@
 
 没有使用 lifo slot 优化。
 
+具体的描述在 [current_thread.km](./current_thread.km) 和 [scheduler](./scheduler.md) 中（两个文件中有重复的地方，使用脑图会更加清楚的帮助理解）。但目前还不理解与 IO、Timer 这些之间如何进行交互，只知道是通过各自的 driver 的 park 方法以及 notify 来进行。
+
 ### multi_thread
 
 初始化时创建固定数量的 worker 线程，维护一个全局队列和与 worker 线程数量相同的局部队列。每个局部队列最多支持 256 个任务。如果局部队列中的任务数量超过 256，则会将其中一半迁移至全局队列中。
@@ -35,3 +37,7 @@ IO 和 timer 事件与 current_thread 相同。
 使用了 lifo slot 优化，当一个任务唤醒了其他任务时，被唤醒的任务被添加到 lifo slot 中，而不是放入队列中，若 lifo slot 中已经存在任务啊，则原来的任务会被放入到线程的局部队列中，新的任务取代原来的任务被放置到 lifo slot 中。优先调度 lifo slot 中的任务。使用 lifo slot 时，不会重置 budget，当 worker 线程连续 3 次使用 lifo slot 时，lifo slot 会被暂时禁用（disable_lifo_slot），直到下一次调度的任务不是来自 lifo slot。其他的线程不能从 lifo slot 中窃取任务。
 
 当任务是被除了 worker 线程之外的其他线程唤醒时，被唤醒的任务会被放置在全局队列中。
+
+更详细的描述见 [multi_thread.km](./multi_thread.km)。
+
+截止目前为止，tokio runtime 中关于任务控制块，任务调度的大部分已经理解了，但是与外部事件相关的 park、unpark 等操作还没有完全理解，以及 worker 之间、外部事件与 worker 之间如何 notify 还未开始。
