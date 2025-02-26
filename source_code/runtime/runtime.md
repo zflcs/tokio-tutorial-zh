@@ -6,6 +6,14 @@
 2. IO
 3. Timer
 
+共享 runtime 的几种方式
+
+- 使用 Arc
+- 使用 Handle：使用 Arc 或者 Handle 可以在多个线程上共享运行时，两者的区别是 runtime 的关闭。调用 shutdown_background 或 shutdown_timeout 需要对 runtime 进行互斥访问，使用 Arc 时，可以通过 try_unwrap。
+- 进入 runtime 的上下文中：通过 Runtime::enter 或者 Handle::enter。当进入 runtime 时，tokio::spawn 将会使用当前所在上下文的运行时。
+
+详细的信息见 [runtime.km](./runtime.km)
+
 ## IO 和 timer
 
 周期性检查 IO 资源和 timer 是否就绪，唤醒相关的任务，并进行调度

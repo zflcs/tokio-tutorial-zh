@@ -4,6 +4,8 @@
 
 与任务相关的调度器、Future 以及结果的详细设计在 `Core<T: Future, S>` 这个结构和它所提供的方法中，这里更多的是提供一些与数据结构相关的功能。与任务的状态、任务在队列中位置等相关的设计在 `Header` 中体现。而 `Trailer` 则是提供 waker、回调函数相关的，这些是与 waker、reactor 相关。
 
+在创建任务时，会直接创建三个引用，OwnedTask 引用交给调度器本身，所有处于活跃状态（没有结束）的任务都有调度器持有这个引用，但不参与任务调度。JoinHandle 引用类似于 std::Thread 类似，而 Notified 引用则是放到任务队列中的，用于调度。Tokio 手动维护任务的引用计数。
+
 ## join
 
 提供了 JoinHandle 这个结构，与 std::thread::JoinHandle 类似。

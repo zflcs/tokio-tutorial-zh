@@ -1,0 +1,46 @@
+{
+    "root": {
+        "data": {
+            "id": "d821y7yorig0",
+            "created": 1740540040209,
+            "text": "driver::Handle"
+        },
+        "children": [
+            {
+                "data": {
+                    "id": "d821ympcs2g0",
+                    "created": 1740540072297,
+                    "text": "io: IoHandle"
+                },
+                "children": []
+            },
+            {
+                "data": {
+                    "id": "d821yt788x40",
+                    "created": 1740540086439,
+                    "text": "signal: SignalHandle"
+                },
+                "children": []
+            },
+            {
+                "data": {
+                    "id": "d821yyeog4o0",
+                    "created": 1740540097772,
+                    "text": "time: TimeHandle"
+                },
+                "children": []
+            },
+            {
+                "data": {
+                    "id": "d821z182ba80",
+                    "created": 1740540103903,
+                    "text": "clock: Clock"
+                },
+                "children": []
+            }
+        ]
+    },
+    "template": "right",
+    "theme": "fresh-blue",
+    "version": "1.4.43"
+}

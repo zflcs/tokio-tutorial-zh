@@ -1,0 +1,39 @@
+{
+    "root": {
+        "data": {
+            "id": "d81zfa6h1lk0",
+            "created": 1740532913895,
+            "text": "Runtime",
+            "note": "提供了以下方法：\n\n- from_parts：根据提供的 scheduler、handle、blocking_pool 构建出 runtime\n- new：创建 multi_thread 运行时，并且使能 IO、Timer 等\n- spawn：生成任务\n- spawn_blocking：生成执行阻塞操作的任务\n- block_on：等待某个 future 执行结束，运行时的入口，non-async 和 async 的边界\n- enter：进入运行时的上下文\n- shutdown_timeout、shutdown_background：关闭运行时\n"
+        },
+        "children": [
+            {
+                "data": {
+                    "id": "d81zfl4p5u00",
+                    "created": 1740532937732,
+                    "text": "scheduler: Scheduler"
+                },
+                "children": []
+            },
+            {
+                "data": {
+                    "id": "d81zfox6xe80",
+                    "created": 1740532945985,
+                    "text": "handle: Handle"
+                },
+                "children": []
+            },
+            {
+                "data": {
+                    "id": "d81zfts1bw00",
+                    "created": 1740532956557,
+                    "text": "blocking_pool: BlockingPool"
+                },
+                "children": []
+            }
+        ]
+    },
+    "template": "right",
+    "theme": "fresh-blue",
+    "version": "1.4.43"
+}
